@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package careround.auth;
+
+option java_package = "com.dayo.careround.authservice.grpc";
+option java_multiple_files = true;
+
+service ActivationTokenService {
+  rpc GetActivationLink (ActivationLinkRequest) returns (ActivationLinkResponse);
+}
+
+message ActivationLinkRequest {
+  string user_id = 1;
+}
+
+message ActivationLinkResponse {
+  string activation_url = 1;
+}
