@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package careround.patient;
+
+option java_package = "com.dayo.careround.patientservice.grpc";
+option java_multiple_files = true;
+
+service PatientCensusService {
+  rpc GetAdmittedCount (WardCensusRequest) returns (WardCensusResponse);
+  rpc PatientExists (PatientExistsRequest) returns (PatientExistsResponse);
+  rpc GetPrimaryNextOfKin (NextOfKinRequest) returns (NextOfKinResponse);
+}
+
+message NextOfKinRequest {
+  string patient_id = 1;
+}
+
+message NextOfKinResponse {
+  bool found = 1;
+  string first_name = 2;
+  string last_name = 3;
+  string phone = 4;
+  string email = 5;
+  string language_preference = 6;
+}
+
+message WardCensusRequest {
+  string ward_id = 1;
+}
+
+message WardCensusResponse {
+  int32 admitted_count = 1;
+}
+
+message PatientExistsRequest {
+  string patient_id = 1;
+}
+
+message PatientExistsResponse {
+  bool exists = 1;
+}
