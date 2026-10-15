@@ -26,6 +26,11 @@ public class NotificationService {
             return;
         }
 
+        if (recipient == null || recipient.isBlank()) {
+            recordFailure(idempotencyKey, channel, "", eventType, "no recipient address");
+            return;
+        }
+
         // Claim the key before sending. The insert holds the unique index on idempotency_key until
         // commit, so a concurrent send of the same key blocks and then fails instead of sending twice.
         // If dispatch throws, the claim rolls back and the record can be retried.

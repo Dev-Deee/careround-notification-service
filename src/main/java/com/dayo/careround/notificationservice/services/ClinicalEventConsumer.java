@@ -53,8 +53,9 @@ public class ClinicalEventConsumer {
             return;
         }
 
-        String recipient = !kin.getPhone().isEmpty() ? kin.getPhone() : kin.getEmail();
-        NotificationChannel channel = !kin.getPhone().isEmpty() ? NotificationChannel.SMS : NotificationChannel.EMAIL;
+        boolean hasPhone = !kin.getPhone().isBlank();
+        String recipient = hasPhone ? kin.getPhone() : kin.getEmail();
+        NotificationChannel channel = hasPhone ? NotificationChannel.SMS : NotificationChannel.EMAIL;
 
         notificationService.send(
                 idempotencyKey,
