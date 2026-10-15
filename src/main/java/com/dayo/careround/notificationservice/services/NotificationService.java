@@ -4,10 +4,11 @@ import com.dayo.careround.notificationservice.data.models.SentNotification;
 import com.dayo.careround.notificationservice.data.models.enums.NotificationChannel;
 import com.dayo.careround.notificationservice.data.models.enums.NotificationStatus;
 import com.dayo.careround.notificationservice.data.repositories.SentNotificationRepository;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Slf4j
 @Service
@@ -15,8 +16,8 @@ import org.springframework.stereotype.Service;
 public class NotificationService {
 
     private final SentNotificationRepository sentNotificationRepository;
+    private final TransactionTemplate transactionTemplate;
 
-    @Transactional
     public void send(String idempotencyKey, NotificationChannel channel, String recipient,
                      String eventType, String body) {
 
@@ -25,16 +26,36 @@ public class NotificationService {
             return;
         }
 
+        // Claim the key before sending. The insert holds the unique index on idempotency_key until
+        // commit, so a concurrent send of the same key blocks and then fails instead of sending twice.
+        // If dispatch throws, the claim rolls back and the record can be retried.
+        try {
+            transactionTemplate.executeWithoutResult(tx -> {
+                sentNotificationRepository.saveAndFlush(newRecord(idempotencyKey, channel, recipient, eventType));
+                dispatch(channel, recipient, body);
+            });
+        } catch (DataIntegrityViolationException e) {
+            if (!sentNotificationRepository.existsByIdempotencyKey(idempotencyKey)) {
+                throw e;
+            }
+            log.info("Notification with key {} claimed concurrently — skipping duplicate", idempotencyKey);
+        }
+    }
+
+    private void dispatch(NotificationChannel channel, String recipient, String body) {
         // Real send would happen here (SendGrid/Twilio API call).
         // Stopgap: console-log, same pattern used everywhere else in this project.
         log.info("NOTIFICATION [{} -> {}]: {}", channel, recipient, body);
+    }
 
+    private SentNotification newRecord(String idempotencyKey, NotificationChannel channel, String recipient,
+                                       String eventType) {
         SentNotification record = new SentNotification();
         record.setIdempotencyKey(idempotencyKey);
         record.setChannel(channel);
         record.setRecipient(recipient);
         record.setEventType(eventType);
         record.setStatus(NotificationStatus.SENT);
-        sentNotificationRepository.save(record);
+        return record;
     }
 }
