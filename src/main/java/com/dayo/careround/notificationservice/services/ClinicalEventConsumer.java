@@ -4,10 +4,12 @@ import com.dayo.careround.notificationservice.data.models.enums.NotificationChan
 import com.dayo.careround.notificationservice.dto.event.PatientEmergencyDeclaredEvent;
 import com.dayo.careround.notificationservice.dto.event.PatientReviewCompletedEvent;
 import com.dayo.careround.notificationservice.grpc.NextOfKinClient;
+import com.dayo.careround.notificationservice.utils.IdempotencyKeys;
 import com.dayo.careround.patientservice.grpc.NextOfKinResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
 
@@ -21,10 +23,10 @@ public class ClinicalEventConsumer {
     private final ObjectMapper objectMapper;
 
     @KafkaListener(topics = "PATIENT_REVIEW_COMPLETED", groupId = "notification-service-group")
-    public void handleReviewCompleted(String payload) {
+    public void handleReviewCompleted(ConsumerRecord<String, String> record) {
         try {
-            PatientReviewCompletedEvent event = objectMapper.readValue(payload, PatientReviewCompletedEvent.class);
-            notifyNextOfKin(event.patientId(), "PATIENT_REVIEW_COMPLETED",
+            PatientReviewCompletedEvent event = objectMapper.readValue(record.value(), PatientReviewCompletedEvent.class);
+            notifyNextOfKin(event.patientId(), IdempotencyKeys.fromRecord(record), "PATIENT_REVIEW_COMPLETED",
                     "There is an update regarding your family member. Please contact the ward.");
         } catch (Exception e) {
             log.error("Failed to process PATIENT_REVIEW_COMPLETED event: {}", e.getMessage(), e);
@@ -32,17 +34,17 @@ public class ClinicalEventConsumer {
     }
 
     @KafkaListener(topics = "PATIENT_EMERGENCY_DECLARED", groupId = "notification-service-group")
-    public void handleEmergencyDeclared(String payload) {
+    public void handleEmergencyDeclared(ConsumerRecord<String, String> record) {
         try {
-            PatientEmergencyDeclaredEvent event = objectMapper.readValue(payload, PatientEmergencyDeclaredEvent.class);
-            notifyNextOfKin(event.patientId(), "PATIENT_EMERGENCY_DECLARED",
+            PatientEmergencyDeclaredEvent event = objectMapper.readValue(record.value(), PatientEmergencyDeclaredEvent.class);
+            notifyNextOfKin(event.patientId(), IdempotencyKeys.fromRecord(record), "PATIENT_EMERGENCY_DECLARED",
                     "Please contact the ward immediately regarding your family member.");
         } catch (Exception e) {
             log.error("Failed to process PATIENT_EMERGENCY_DECLARED event: {}", e.getMessage(), e);
         }
     }
 
-    private void notifyNextOfKin(java.util.UUID patientId, String eventType, String messageBody) {
+    private void notifyNextOfKin(java.util.UUID patientId, String idempotencyKey, String eventType, String messageBody) {
         NextOfKinResponse kin = nextOfKinClient.getPrimaryNextOfKin(patientId);
 
         if (!kin.getFound()) {
@@ -54,7 +56,7 @@ public class ClinicalEventConsumer {
         NotificationChannel channel = !kin.getPhone().isEmpty() ? NotificationChannel.SMS : NotificationChannel.EMAIL;
 
         notificationService.send(
-                eventType + "-" + patientId + "-" + System.currentTimeMillis(),
+                idempotencyKey,
                 channel,
                 recipient,
                 eventType,

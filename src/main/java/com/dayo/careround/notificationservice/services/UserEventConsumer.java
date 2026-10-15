@@ -4,9 +4,11 @@ import com.dayo.careround.notificationservice.data.models.enums.NotificationChan
 import com.dayo.careround.notificationservice.dto.event.UserRegisteredEvent;
 import com.dayo.careround.notificationservice.dto.event.VerificationResentEvent;
 import com.dayo.careround.notificationservice.grpc.ActivationTokenClient;
+import com.dayo.careround.notificationservice.utils.IdempotencyKeys;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
 
@@ -20,9 +22,9 @@ public class UserEventConsumer {
     private final ObjectMapper objectMapper;
 
     @KafkaListener(topics = "user.registered", groupId = "notification-service-group")
-    public void handleUserRegistered(String payload) {
+    public void handleUserRegistered(ConsumerRecord<String, String> record) {
         try {
-            UserRegisteredEvent event = objectMapper.readValue(payload, UserRegisteredEvent.class);
+            UserRegisteredEvent event = objectMapper.readValue(record.value(), UserRegisteredEvent.class);
             String activationUrl = activationTokenClient.getActivationLink(event.userId());
 
             if (activationUrl.isEmpty()) {
@@ -36,7 +38,7 @@ public class UserEventConsumer {
             );
 
             notificationService.send(
-                    "activation-" + event.userId(),
+                    IdempotencyKeys.fromRecord(record),
                     NotificationChannel.EMAIL,
                     event.email(),
                     "user.registered",
@@ -49,9 +51,9 @@ public class UserEventConsumer {
     }
 
     @KafkaListener(topics = "user.verification_resent", groupId = "notification-service-group")
-    public void handleVerificationResent(String payload) {
+    public void handleVerificationResent(ConsumerRecord<String, String> record) {
         try {
-            VerificationResentEvent event = objectMapper.readValue(payload, VerificationResentEvent.class);
+            VerificationResentEvent event = objectMapper.readValue(record.value(), VerificationResentEvent.class);
             String activationUrl = activationTokenClient.getActivationLink(event.userId());
 
             if (activationUrl.isEmpty()) {
@@ -62,7 +64,7 @@ public class UserEventConsumer {
             String body = String.format("Your activation link has been renewed: %s", activationUrl);
 
             notificationService.send(
-                    "activation-resend-" + event.userId() + "-" + System.currentTimeMillis(),
+                    IdempotencyKeys.fromRecord(record),
                     NotificationChannel.EMAIL,
                     event.email(),
                     "user.verification_resent",
