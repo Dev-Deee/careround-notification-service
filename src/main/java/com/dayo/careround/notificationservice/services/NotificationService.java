@@ -31,7 +31,7 @@ public class NotificationService {
         // If dispatch throws, the claim rolls back and the record can be retried.
         try {
             transactionTemplate.executeWithoutResult(tx -> {
-                sentNotificationRepository.saveAndFlush(newRecord(idempotencyKey, channel, recipient, eventType));
+                sentNotificationRepository.saveAndFlush(newRecord(idempotencyKey, channel, recipient, eventType, NotificationStatus.SENT));
                 dispatch(channel, recipient, body);
             });
         } catch (DataIntegrityViolationException e) {
@@ -42,6 +42,25 @@ public class NotificationService {
         }
     }
 
+    // Records a notification that could not be sent so it is visible to admins (and not silently dropped).
+    public void recordFailure(String idempotencyKey, NotificationChannel channel, String recipient,
+                              String eventType, String reason) {
+        if (sentNotificationRepository.existsByIdempotencyKey(idempotencyKey)) {
+            log.info("Notification with key {} already recorded — skipping duplicate", idempotencyKey);
+            return;
+        }
+        log.warn("Notification {} [{} -> {}] not sent: {}", idempotencyKey, channel, recipient, reason);
+        try {
+            sentNotificationRepository.saveAndFlush(
+                    newRecord(idempotencyKey, channel, recipient, eventType, NotificationStatus.FAILED));
+        } catch (DataIntegrityViolationException e) {
+            if (!sentNotificationRepository.existsByIdempotencyKey(idempotencyKey)) {
+                throw e;
+            }
+            log.info("Notification with key {} already recorded — skipping duplicate", idempotencyKey);
+        }
+    }
+
     private void dispatch(NotificationChannel channel, String recipient, String body) {
         // Real send would happen here (SendGrid/Twilio API call).
         // Stopgap: console-log, same pattern used everywhere else in this project.
@@ -49,13 +68,13 @@ public class NotificationService {
     }
 
     private SentNotification newRecord(String idempotencyKey, NotificationChannel channel, String recipient,
-                                       String eventType) {
+                                       String eventType, NotificationStatus status) {
         SentNotification record = new SentNotification();
         record.setIdempotencyKey(idempotencyKey);
         record.setChannel(channel);
         record.setRecipient(recipient);
         record.setEventType(eventType);
-        record.setStatus(NotificationStatus.SENT);
+        record.setStatus(status);
         return record;
     }
 }

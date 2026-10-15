@@ -26,13 +26,18 @@ public class UserEventConsumer {
     private final NotificationService notificationService;
     private final ObjectMapper objectMapper;
 
+    // Auth returns an empty link once the Redis token's TTL (1h registration / 30m resend) has passed.
+    private static final String ACTIVATION_TOKEN_EXPIRED =
+            "activation token expired or missing in auth-service; admin can reissue via POST /api/v1/auth/admin/resend-activation";
+
     @KafkaListener(topics = "user.registered", groupId = "notification-service-group")
     public void handleUserRegistered(ConsumerRecord<String, String> record) throws JsonProcessingException {
         UserRegisteredEvent event = objectMapper.readValue(record.value(), UserRegisteredEvent.class);
         String activationUrl = activationTokenClient.getActivationLink(requireUserId(event.userId(), record));
 
         if (activationUrl.isEmpty()) {
-            log.error("No activation token found in Redis for userId {} — cannot send activation email", event.userId());
+            notificationService.recordFailure(IdempotencyKeys.fromRecord(record), NotificationChannel.EMAIL,
+                    event.email(), "user.registered", ACTIVATION_TOKEN_EXPIRED);
             return;
         }
 
@@ -56,7 +61,8 @@ public class UserEventConsumer {
         String activationUrl = activationTokenClient.getActivationLink(requireUserId(event.userId(), record));
 
         if (activationUrl.isEmpty()) {
-            log.error("No activation token found in Redis for userId {} — cannot resend activation email", event.userId());
+            notificationService.recordFailure(IdempotencyKeys.fromRecord(record), NotificationChannel.EMAIL,
+                    event.email(), "user.verification_resent", ACTIVATION_TOKEN_EXPIRED);
             return;
         }
 
