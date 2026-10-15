@@ -14,6 +14,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
 
+import java.util.Optional;
 import java.util.UUID;
 
 // Exceptions propagate to KafkaErrorHandlingConfig (retry, then dead-letter) so a failed
@@ -46,7 +47,12 @@ public class ClinicalEventConsumer {
             throw new IllegalArgumentException(eventType + " event " + idempotencyKey + " has no patientId");
         }
 
-        NextOfKinResponse kin = nextOfKinClient.getPrimaryNextOfKin(patientId);
+        Optional<NextOfKinResponse> lookup = nextOfKinClient.getPrimaryNextOfKin(patientId);
+        if (lookup.isEmpty()) {
+            log.warn("Patient {} is unknown to patient-service — cannot send {} notification", patientId, eventType);
+            return;
+        }
+        NextOfKinResponse kin = lookup.get();
 
         if (!kin.getFound()) {
             log.warn("No next-of-kin found for patient {} — cannot send {} notification", patientId, eventType);
