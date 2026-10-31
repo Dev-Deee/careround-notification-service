@@ -2,6 +2,7 @@ package com.dayo.careround.notificationservice.services;
 
 import com.dayo.careround.notificationservice.data.models.enums.NotificationChannel;
 import com.dayo.careround.notificationservice.dto.event.PatientEmergencyDeclaredEvent;
+import com.dayo.careround.notificationservice.dto.event.PatientEmergencyResolvedEvent;
 import com.dayo.careround.notificationservice.dto.event.PatientReviewCompletedEvent;
 import com.dayo.careround.notificationservice.grpc.NextOfKinClient;
 import com.dayo.careround.notificationservice.utils.IdempotencyKeys;
@@ -26,6 +27,7 @@ public class ClinicalEventConsumer {
 
     private final NextOfKinClient nextOfKinClient;
     private final NotificationService notificationService;
+    private final AlertService alertService;
     private final ObjectMapper objectMapper;
 
     @KafkaListener(topics = "PATIENT_REVIEW_COMPLETED", groupId = "notification-service-group")
@@ -35,17 +37,41 @@ public class ClinicalEventConsumer {
                 "There is an update regarding your family member. Please contact the ward.");
     }
 
+    // SMS first, so a slow ward lookup or Redis never delays it. The alert is raised even when the SMS step
+    // fails (e.g. patient-service down), then the SMS failure is rethrown so the record is still retried;
+    // the retry finds the alert by sourceEventId and does not raise it twice.
     @KafkaListener(topics = "PATIENT_EMERGENCY_DECLARED", groupId = "notification-service-group")
     public void handleEmergencyDeclared(ConsumerRecord<String, String> record) throws JsonProcessingException {
         PatientEmergencyDeclaredEvent event = objectMapper.readValue(record.value(), PatientEmergencyDeclaredEvent.class);
-        notifyNextOfKin(event.patientId(), IdempotencyKeys.fromRecord(record), "PATIENT_EMERGENCY_DECLARED",
-                "Please contact the ward immediately regarding your family member.");
+        String key = IdempotencyKeys.fromRecord(record);
+        requirePatientId(event.patientId(), "PATIENT_EMERGENCY_DECLARED", key);
+
+        RuntimeException smsFailure = null;
+        try {
+            notifyNextOfKin(event.patientId(), key, "PATIENT_EMERGENCY_DECLARED",
+                    "Please contact the ward immediately regarding your family member.");
+        } catch (RuntimeException e) {
+            smsFailure = e;
+        }
+
+        alertService.raiseEmergencyAlert(event, key);
+
+        if (smsFailure != null) {
+            throw smsFailure;
+        }
+    }
+
+    // No SMS and no Alert row: the resolve is only announced to the ward's tablets.
+    @KafkaListener(topics = "PATIENT_EMERGENCY_RESOLVED", groupId = "notification-service-group")
+    public void handleEmergencyResolved(ConsumerRecord<String, String> record) throws JsonProcessingException {
+        PatientEmergencyResolvedEvent event = objectMapper.readValue(record.value(), PatientEmergencyResolvedEvent.class);
+        String key = IdempotencyKeys.fromRecord(record);
+        requirePatientId(event.patientId(), "PATIENT_EMERGENCY_RESOLVED", key);
+        alertService.announceEmergencyResolved(event, key);
     }
 
     private void notifyNextOfKin(UUID patientId, String idempotencyKey, String eventType, String messageBody) {
-        if (patientId == null) {
-            throw new IllegalArgumentException(eventType + " event " + idempotencyKey + " has no patientId");
-        }
+        requirePatientId(patientId, eventType, idempotencyKey);
 
         Optional<NextOfKinResponse> lookup = nextOfKinClient.getPrimaryNextOfKin(patientId);
         if (lookup.isEmpty()) {
@@ -70,5 +96,11 @@ public class ClinicalEventConsumer {
                 eventType,
                 messageBody
         );
+    }
+
+    private static void requirePatientId(UUID patientId, String eventType, String idempotencyKey) {
+        if (patientId == null) {
+            throw new IllegalArgumentException(eventType + " event " + idempotencyKey + " has no patientId");
+        }
     }
 }
