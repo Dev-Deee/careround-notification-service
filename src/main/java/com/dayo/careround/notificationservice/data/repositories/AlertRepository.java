@@ -9,5 +9,7 @@ import java.util.UUID;
 
 public interface AlertRepository extends JpaRepository<Alert, UUID> {
     Optional<Alert> findByPublicId(UUID publicId);
+    boolean existsBySourceEventId(String sourceEventId);
+    Optional<Alert> findBySourceEventId(String sourceEventId);
     List<Alert> findByAcknowledgedAtIsNull();
 }
