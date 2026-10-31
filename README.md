@@ -6,8 +6,33 @@ Kafka consumer that turns CareRound events into notifications. HTTP 8087 (actuat
 |---|---|
 | `user.registered` / `user.verification_resent` | Activation email. The link is fetched from auth-service over gRPC; tokens never travel through Kafka. |
 | `PATIENT_EMERGENCY_DECLARED` / `PATIENT_REVIEW_COMPLETED` | SMS (or email) to the patient's primary next-of-kin, with no clinical detail. |
+| `PATIENT_EMERGENCY_DECLARED` | Also saves an `Alert` and publishes `ALERT_RAISED` to Redis for realtime-service (below). |
+| `PATIENT_EMERGENCY_RESOLVED` | No SMS, no row: publishes `ALERT_RESOLVED` to Redis. |
 
 Every notification is recorded in `sent_notifications`, keyed by the Kafka record key (the producer's outbox idempotency key). A redelivered or replayed event is therefore skipped ("already sent") rather than sent twice. Notifications that could not be sent are recorded with status `FAILED`.
+
+## Alerts and Redis
+
+On `PATIENT_EMERGENCY_DECLARED` the next-of-kin SMS goes first, then an `Alert` is saved with `sourceEventId` = the
+Kafka record key, and `ALERT_RAISED` is published to the Redis channel `app.alerts.redis-channel` (default
+`careround.alerts`) after the transaction commits. realtime-service pushes it to `/topic/wards/{wardId}`.
+
+- `wardId` comes from the event; if it is null, patient-service `PatientExists` (`ward_id`) is asked. If it is still
+  unknown the alert has `wardUnresolved=true`, `wardId` null, and realtime routes it to `/topic/admin/alerts`.
+- A redelivered or replayed event finds its `sourceEventId` and creates/publishes nothing.
+- The alert is raised even if the SMS step fails (e.g. patient-service down); the SMS failure is then rethrown so the
+  record is still retried / dead-lettered as before.
+- Redis is fire-and-forget (2 s timeout). A failed publish is logged at ERROR and never fails the listener; the Alert
+  row stays and clients recover it from the replay endpoint.
+
+Message (`schemaVersion: 1`, additive only, ids only):
+
+```json
+{ "schemaVersion": 1, "kind": "ALERT_RAISED | ALERT_RESOLVED | ALERT_ACKNOWLEDGED",
+  "alertId": "<Alert.publicId, null for ALERT_RESOLVED>", "eventId": "<Kafka record key>",
+  "type": "PATIENT_EMERGENCY_DECLARED", "wardId": "<ward publicId or null>", "patientId": "<patient publicId>",
+  "occurredAt": "<ISO-8601>", "acknowledgedBy": "<userId or null>" }
+```
 
 ## Failed events and the `-dlt` topics
 
@@ -44,7 +69,7 @@ The `-dlt` topics keep records for Kafka's retention period (7 days by default),
 
 ## Not used yet
 
-`Alert`, `Escalation` and `NotificationTemplate` (and their repositories) are scaffolding for the deferred alert acknowledgement and escalation sweep (FR-7.3) and for templates and language preference. They are not dead code to delete.
+`Escalation` and `NotificationTemplate` (and their repositories) are scaffolding for the deferred escalation sweep (FR-7.3) and for templates and language preference. They are not dead code to delete.
 
 ## Postman
 
