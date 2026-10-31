@@ -274,7 +274,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"firstName\": \"Doctor\",\n  \"lastName\": \"Run{{runId}}\",\n  \"email\": \"pmalerts.doctor.{{runId}}@careround.com\",\n  \"phoneNumber\": \"084{{runId}}\",\n  \"role\": \"DOCTOR\",\n  \"grade\": \"REGISTRAR\",\n  \"specialization\": \"General Medicine\",\n  \"licenseNumber\": \"LIC-PMALERTS-D-{{runId}}\",\n  \"assignedWardId\": \"{{wardPublicId}}\"\n}"
+              "raw": "{\n  \"firstName\": \"Doctor\",\n  \"lastName\": \"Run{{runId}}\",\n  \"email\": \"pmalerts.doctor.{{runId}}@careround.com\",\n  \"phoneNumber\": \"084{{runId}}\",\n  \"role\": \"DOCTOR\",\n  \"grade\": \"MEDICAL_OFFICER\",\n  \"specialization\": \"General Medicine\",\n  \"licenseNumber\": \"LIC-PMALERTS-D-{{runId}}\",\n  \"assignedWardId\": \"{{wardPublicId}}\"\n}"
             }
           },
           "response": [],
