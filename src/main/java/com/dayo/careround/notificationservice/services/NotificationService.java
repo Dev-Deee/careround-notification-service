@@ -56,8 +56,9 @@ public class NotificationService {
         }
         log.warn("Notification {} [{} -> {}] not sent: {}", idempotencyKey, channel, recipient, reason);
         try {
-            sentNotificationRepository.saveAndFlush(
-                    newRecord(idempotencyKey, channel, recipient, eventType, NotificationStatus.FAILED));
+            SentNotification failed = newRecord(idempotencyKey, channel, recipient, eventType, NotificationStatus.FAILED);
+            failed.setFailureReason(reason);
+            sentNotificationRepository.saveAndFlush(failed);
         } catch (DataIntegrityViolationException e) {
             if (!sentNotificationRepository.existsByIdempotencyKey(idempotencyKey)) {
                 throw e;
