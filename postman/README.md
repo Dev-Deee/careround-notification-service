@@ -4,6 +4,8 @@ Import both files into Postman (**File → Import**, or drag them in), then pick
 
 1. Set `superAdminPassword` in the environment (the seed admin's password; never commit it).
 2. Run the folders in order. Each run uses a fresh `runId`, so emails never clash and the collection can be re-run.
+   **00 - Bootstrap** creates a ward for the run and captures `wardPublicId`: patient admission and round creation
+   now verify the ward with ward-service, so a made-up ward id returns 404.
 3. At **MANUAL STEP - activate…**: set `doctorPassword` / `nursePassword` in the environment, then open each
    account's link from the notification-service console (`NOTIFICATION [EMAIL -> …] … Activate your account: <link>`)
    and submit that password on the page.

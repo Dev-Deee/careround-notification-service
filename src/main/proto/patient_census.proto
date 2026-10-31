@@ -38,4 +38,5 @@ message PatientExistsRequest {
 
 message PatientExistsResponse {
   bool exists = 1;
+  string ward_id = 2;
 }

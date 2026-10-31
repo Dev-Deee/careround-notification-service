@@ -20,12 +20,22 @@ public class Alert {
     @Column(nullable = false, unique = true, updatable = false)
     private UUID publicId = UUID.randomUUID();
 
+    // Kafka record key of the event that raised this alert (the producer's outbox idempotency key,
+    // e.g. "emergency-declared-{episodeId}"). Unique, so a redelivered event cannot create a second alert.
+    @Column(nullable = false, unique = true, updatable = false)
+    private String sourceEventId;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private AlertType type;
 
     @Column
     private UUID wardId;
+
+    // True when the event arrived without a wardId (producer could not resolve it) and the ward
+    // still has to be looked up before the alert can be routed to a ward.
+    @Column(nullable = false)
+    private boolean wardUnresolved = false;
 
     @Column
     private UUID patientId;
