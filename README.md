@@ -34,6 +34,19 @@ Message (`schemaVersion: 1`, additive only, ids only):
   "occurredAt": "<ISO-8601>", "acknowledgedBy": "<userId or null>" }
 ```
 
+## Alert REST (replay and acknowledge)
+
+JWT as in the other services. Responses carry ids and state only (`publicId, type, wardId, patientId, createdAt,
+acknowledgedBy, acknowledgedAt, escalationState`).
+
+| Endpoint | Who | |
+|---|---|---|
+| `GET /api/v1/wards/{wardId}/alerts?since=<ISO-8601>&unacknowledgedOnly=<bool>` | DOCTOR/NURSE of that ward (token `assignedWardId`), ADMIN any ward | newest first, max 200, default last 24 h. How a tablet recovers alerts it missed (Redis keeps nothing) |
+| `GET /api/v1/alerts/unresolved-ward` | ADMIN | alerts with `wardUnresolved=true`, not acknowledged |
+| `POST /api/v1/alerts/{publicId}/acknowledge` | DOCTOR/NURSE of the alert's ward, ADMIN (only ADMIN when the alert has no ward) | first ack records who/when, `escalationState=ACKNOWLEDGE`, publishes `ALERT_ACKNOWLEDGED`; a repeat returns the original ack and publishes nothing. Unknown → 404 |
+
+Escalation timers (FR-7.3) are not implemented yet.
+
 ## Failed events and the `-dlt` topics
 
 When a listener fails, the record is retried 4 times (1 s, 2 s, 4 s, 8 s) and then published to `<topic>-dlt`, for example `PATIENT_EMERGENCY_DECLARED-dlt`. Unparseable JSON and events without an id go there straight away, without retries. **Nothing consumes the `-dlt` topics.** Reprocessing is manual, and replaying is safe: a record that has been sent since is skipped.
