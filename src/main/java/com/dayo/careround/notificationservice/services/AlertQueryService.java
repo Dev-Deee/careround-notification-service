@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 
@@ -66,7 +67,8 @@ public class AlertQueryService {
         }
 
         alert.setAcknowledgedBy(caller.userId());
-        alert.setAcknowledgedAt(Instant.now());
+        // Postgres keeps microseconds: truncate so this response, the pushed message and every repeat agree.
+        alert.setAcknowledgedAt(Instant.now().truncatedTo(ChronoUnit.MICROS));
         alert.setEscalationState(EscalationState.ACKNOWLEDGE);
         alertRepository.save(alert);
 
