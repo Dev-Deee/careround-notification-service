@@ -103,6 +103,51 @@
               }
             }
           ]
+        },
+        {
+          "name": "Create Ward - real ward for this run (201)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{superAdminAccessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{wardBaseUrl}}/api/v1/wards",
+              "host": [
+                "{{wardBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "wards"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman Ward {{runId}}\",\n  \"capacity\": 20\n}"
+            },
+            "description": "Patient admission and round creation verify the ward with ward-service (404 for an unknown ward), so each run creates a real ward and uses its publicId."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', function () { pm.response.to.have.status(201); });",
+                  "pm.test('Capture wardPublicId', function () { pm.environment.set('wardPublicId', pm.response.json().publicId); });"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
