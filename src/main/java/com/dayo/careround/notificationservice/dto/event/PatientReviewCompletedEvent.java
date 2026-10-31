@@ -6,8 +6,9 @@ import java.util.UUID;
 public record PatientReviewCompletedEvent(
         UUID patientId,
         UUID wardId,
-        UUID roundId,
+        UUID roundId, // deprecated: the round's internal id; use roundPublicId
         String statusSummary,
         UUID resolvedByDoctorId,
-        Instant occurredAt
+        Instant occurredAt,
+        UUID roundPublicId
 ) {}

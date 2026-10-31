@@ -88,6 +88,19 @@ The `-dlt` topics keep records for Kafka's retention period (7 days by default),
 
 See `postman/` (on the `docs/postman-notification` branch until merged).
 
+## Admin: delivery log
+
+`GET /api/v1/admin/notifications?status&channel&page&size` and `GET /api/v1/admin/notifications/failed?channel&page&size`
+(= `status=FAILED`) — any ADMIN; routed by the gateway. Newest `sentAt` first; `page` 0-based, `size` 20 (max 100);
+`{items, page, size, total}`. Items: `id`, `idempotencyKey`, `eventType`, `channel`, `status`, `recipientMasked`
+(`0806***0001`, `a***@host.com`), `failureReason`, `sentAt`. Message bodies are never stored, so never returned.
+`failureReason` is recorded for failures from this version on (older FAILED rows have null).
+
+`PATIENT_REVIEW_COMPLETED` is read with the new `roundPublicId`; its `roundId` (round internal id) is
+**deprecated**.
+
+PRD `POST /admin/notifications/{id}/resend` is not built yet (not in this phase); the list is the read half.
+
 ## Errors
 
 Every error uses the body `{"status", "error", "message", "timestamp"}`.

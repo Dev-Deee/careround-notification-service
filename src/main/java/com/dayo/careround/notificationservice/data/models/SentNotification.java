@@ -36,4 +36,8 @@ public class SentNotification {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private NotificationStatus status;
+
+    // Why a FAILED record was not sent (no recipient, gRPC lookup failed, ...). Null for SENT.
+    @Column
+    private String failureReason;
 }
