@@ -37,6 +37,16 @@ public class AlertController {
         return ResponseEntity.ok(alertQueryService.getWardAlerts(wardId, since, unacknowledgedOnly, principal));
     }
 
+    // The caller's own targeted alerts (any staff), newest first, capped like the ward replay.
+    @GetMapping("/alerts/mine")
+    @PreAuthorize("hasRole('DOCTOR') or hasRole('NURSE') or hasRole('ADMIN')")
+    public ResponseEntity<List<AlertResponse>> getMyAlerts(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant since,
+            @RequestParam(defaultValue = "false") boolean unacknowledgedOnly,
+            @AuthenticationPrincipal CareRoundPrincipal principal) {
+        return ResponseEntity.ok(alertQueryService.getMyAlerts(since, unacknowledgedOnly, principal));
+    }
+
     @GetMapping("/alerts/unresolved-ward")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<AlertResponse>> getUnresolvedWardAlerts() {

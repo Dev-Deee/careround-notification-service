@@ -1,5 +1,8 @@
 package com.dayo.careround.notificationservice.services;
 
+import com.dayo.careround.notificationservice.dto.event.MedicationAdministeredEvent;
+import com.dayo.careround.notificationservice.dto.event.MedicationOverdueEvent;
+import com.dayo.careround.notificationservice.dto.event.TaskOverdueEvent;
 import com.dayo.careround.notificationservice.data.models.enums.NotificationChannel;
 import com.dayo.careround.notificationservice.dto.event.PatientEmergencyDeclaredEvent;
 import com.dayo.careround.notificationservice.dto.event.PatientEmergencyResolvedEvent;
@@ -68,6 +71,31 @@ public class ClinicalEventConsumer {
         String key = IdempotencyKeys.fromRecord(record);
         requirePatientId(event.patientId(), "PATIENT_EMERGENCY_RESOLVED", key);
         alertService.announceEmergencyResolved(event, key);
+    }
+
+    // Phase 10a care-task events: in-system alerts only, never SMS/email (FR-12.1, PHI stays in the system).
+    @KafkaListener(topics = "MEDICATION_OVERDUE", groupId = "notification-service-group")
+    public void handleMedicationOverdue(ConsumerRecord<String, String> record) throws JsonProcessingException {
+        MedicationOverdueEvent event = objectMapper.readValue(record.value(), MedicationOverdueEvent.class);
+        String key = IdempotencyKeys.fromRecord(record);
+        requirePatientId(event.patientId(), "MEDICATION_OVERDUE", key);
+        alertService.raiseMedicationOverdue(event, key);
+    }
+
+    @KafkaListener(topics = "TASK_OVERDUE", groupId = "notification-service-group")
+    public void handleTaskOverdue(ConsumerRecord<String, String> record) throws JsonProcessingException {
+        TaskOverdueEvent event = objectMapper.readValue(record.value(), TaskOverdueEvent.class);
+        String key = IdempotencyKeys.fromRecord(record);
+        requirePatientId(event.patientId(), "TASK_OVERDUE", key);
+        alertService.raiseTaskOverdue(event, key);
+    }
+
+    @KafkaListener(topics = "MEDICATION_ADMINISTERED", groupId = "notification-service-group")
+    public void handleMedicationAdministered(ConsumerRecord<String, String> record) throws JsonProcessingException {
+        MedicationAdministeredEvent event = objectMapper.readValue(record.value(), MedicationAdministeredEvent.class);
+        String key = IdempotencyKeys.fromRecord(record);
+        requirePatientId(event.patientId(), "MEDICATION_ADMINISTERED", key);
+        alertService.raiseMedicationAdministered(event, key);
     }
 
     private void notifyNextOfKin(UUID patientId, String idempotencyKey, String eventType, String messageBody) {

@@ -1,5 +1,6 @@
 package com.dayo.careround.notificationservice.dto.response;
 
+import com.dayo.careround.notificationservice.data.models.enums.AlertSeverity;
 import com.dayo.careround.notificationservice.data.models.enums.AlertType;
 import com.dayo.careround.notificationservice.data.models.enums.EscalationState;
 
@@ -15,5 +16,10 @@ public record AlertResponse(
         Instant createdAt,
         UUID acknowledgedBy,
         Instant acknowledgedAt,
-        EscalationState escalationState
+        EscalationState escalationState,
+        UUID targetUserId, // null = ward alert
+        AlertSeverity severity,
+        boolean requiresAck,
+        UUID taskPublicId,
+        Boolean acknowledgedAsAdmin
 ) {}

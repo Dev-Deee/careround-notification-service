@@ -24,9 +24,14 @@ public interface AlertRepository extends JpaRepository<Alert, UUID> {
     @Query("select a from Alert a where a.publicId = :publicId")
     Optional<Alert> findByPublicIdForUpdate(@Param("publicId") UUID publicId);
 
-    List<Alert> findByWardIdAndCreatedAtGreaterThanEqualOrderByCreatedAtDesc(UUID wardId, Instant since, Pageable page);
+    // Ward replay: ward alerts only (targeted alerts are not ward alerts even when they carry a wardId).
+    List<Alert> findByWardIdAndTargetUserIdIsNullAndCreatedAtGreaterThanEqualOrderByCreatedAtDesc(UUID wardId, Instant since, Pageable page);
 
-    List<Alert> findByWardIdAndCreatedAtGreaterThanEqualAndAcknowledgedAtIsNullOrderByCreatedAtDesc(UUID wardId, Instant since, Pageable page);
+    List<Alert> findByWardIdAndTargetUserIdIsNullAndCreatedAtGreaterThanEqualAndAcknowledgedAtIsNullOrderByCreatedAtDesc(UUID wardId, Instant since, Pageable page);
+
+    List<Alert> findByTargetUserIdAndCreatedAtGreaterThanEqualOrderByCreatedAtDesc(UUID targetUserId, Instant since, Pageable page);
+
+    List<Alert> findByTargetUserIdAndCreatedAtGreaterThanEqualAndAcknowledgedAtIsNullOrderByCreatedAtDesc(UUID targetUserId, Instant since, Pageable page);
 
     List<Alert> findByWardUnresolvedTrueAndAcknowledgedAtIsNullOrderByCreatedAtDesc(Pageable page);
 }
