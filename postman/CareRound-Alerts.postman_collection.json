@@ -705,7 +705,11 @@
                   "    pm.environment.set('alertPublicId', alert.publicId);",
                   "});",
                   "pm.test('Ids and state only - no names or clinical detail', function () {",
-                  "    pm.expect(Object.keys(alert).sort()).to.eql(['acknowledgedAt', 'acknowledgedBy', 'createdAt', 'escalationState', 'patientId', 'publicId', 'type', 'wardId']);",
+                  "    const allowed = ['acknowledgedAt', 'acknowledgedBy', 'createdAt', 'escalationState', 'patientId', 'publicId', 'type', 'wardId',",
+                  "                     'targetUserId', 'severity', 'requiresAck', 'taskPublicId', 'acknowledgedAsAdmin'];  // Phase 10a routing fields (ids/state)",
+                  "    pm.expect(alert).to.include.all.keys('acknowledgedAt', 'acknowledgedBy', 'createdAt', 'escalationState', 'patientId', 'publicId', 'type', 'wardId');",
+                  "    Object.keys(alert).forEach(k => pm.expect(allowed, 'unexpected field ' + k).to.include(k));",
+                  "    pm.expect(alert.targetUserId).to.eql(null);  // the ward replay holds ward alerts only",
                   "});",
                   "pm.test('Newest first', function () { const t = pm.response.json().map(a => a.createdAt); pm.expect(t).to.eql([...t].sort().reverse()); });"
                 ]
