@@ -1,5 +1,7 @@
 package com.dayo.careround.notificationservice.services;
 
+import com.dayo.careround.notificationservice.utils.RecipientMasker;
+import org.springframework.beans.factory.annotation.Value;
 import com.dayo.careround.notificationservice.data.models.SentNotification;
 import com.dayo.careround.notificationservice.data.models.enums.NotificationChannel;
 import com.dayo.careround.notificationservice.data.models.enums.NotificationStatus;
@@ -17,6 +19,10 @@ public class NotificationService {
 
     private final SentNotificationRepository sentNotificationRepository;
     private final TransactionTemplate transactionTemplate;
+
+    // Dev default true (developers copy activation links from the console); false in production.
+    @Value("${app.notification.log-delivery-payload:true}")
+    private boolean logDeliveryPayload = true;
 
     public void send(String idempotencyKey, NotificationChannel channel, String recipient,
                      String eventType, String body) {
@@ -37,7 +43,7 @@ public class NotificationService {
         try {
             transactionTemplate.executeWithoutResult(tx -> {
                 sentNotificationRepository.saveAndFlush(newRecord(idempotencyKey, channel, recipient, eventType, NotificationStatus.SENT));
-                dispatch(channel, recipient, body);
+                dispatch(idempotencyKey, channel, recipient, body);
             });
         } catch (DataIntegrityViolationException e) {
             if (!sentNotificationRepository.existsByIdempotencyKey(idempotencyKey)) {
@@ -54,7 +60,7 @@ public class NotificationService {
             log.info("Notification with key {} already recorded — skipping duplicate", idempotencyKey);
             return;
         }
-        log.warn("Notification {} [{} -> {}] not sent: {}", idempotencyKey, channel, recipient, reason);
+        log.warn("Notification {} [{} -> {}] not sent: {}", idempotencyKey, channel, RecipientMasker.mask(recipient), reason);
         try {
             SentNotification failed = newRecord(idempotencyKey, channel, recipient, eventType, NotificationStatus.FAILED);
             failed.setFailureReason(reason);
@@ -67,10 +73,15 @@ public class NotificationService {
         }
     }
 
-    private void dispatch(NotificationChannel channel, String recipient, String body) {
+    private void dispatch(String idempotencyKey, NotificationChannel channel, String recipient, String body) {
         // Real send would happen here (SendGrid/Twilio API call).
         // Stopgap: console-log, same pattern used everywhere else in this project.
-        log.info("NOTIFICATION [{} -> {}]: {}", channel, recipient, body);
+        // Recipients are always masked. The body (it can hold an activation link) only with log-delivery-payload.
+        if (logDeliveryPayload) {
+            log.info("NOTIFICATION [{} -> {}] key={}: {}", channel, RecipientMasker.mask(recipient), idempotencyKey, body);
+        } else {
+            log.info("NOTIFICATION [{} -> {}] key={}", channel, RecipientMasker.mask(recipient), idempotencyKey);
+        }
     }
 
     private SentNotification newRecord(String idempotencyKey, NotificationChannel channel, String recipient,

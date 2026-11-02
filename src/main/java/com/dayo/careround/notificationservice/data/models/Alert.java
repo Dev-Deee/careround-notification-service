@@ -1,5 +1,6 @@
 package com.dayo.careround.notificationservice.data.models;
 
+import com.dayo.careround.notificationservice.data.models.enums.AlertSeverity;
 import com.dayo.careround.notificationservice.data.models.enums.AlertType;
 import com.dayo.careround.notificationservice.data.models.enums.EscalationState;
 import jakarta.persistence.*;
@@ -52,4 +53,24 @@ public class Alert {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private EscalationState escalationState = EscalationState.PENDING;
+
+    // Phase 10a, all nullable so ddl-auto can add them to existing rows. Null targetUserId = a ward alert.
+    // A targeted alert is for one staff member (user id = JWT sub) and is pushed only to /topic/users/{id}.
+    @Column
+    private UUID targetUserId;
+
+    // Null on rows created before this column: read as CRITICAL / requiresAck (they were all emergencies).
+    @Enumerated(EnumType.STRING)
+    @Column
+    private AlertSeverity severity;
+
+    @Column
+    private Boolean requiresAck;
+
+    @Column
+    private UUID taskPublicId;
+
+    // True when an admin acknowledged a targeted alert on the target's behalf (audit).
+    @Column
+    private Boolean acknowledgedAsAdmin;
 }

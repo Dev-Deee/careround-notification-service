@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package careround.ward;
+
+option java_package = "com.dayo.careround.wardservice.grpc";
+option java_multiple_files = true;
+
+service ChargeVerificationService {
+  rpc IsActiveChargeNurse (ChargeVerificationRequest) returns (ChargeVerificationResponse);
+  // Who holds charge on the ward right now (found=false when nobody does). Used to target charge-nurse alerts.
+  rpc GetActiveChargeNurse (ActiveChargeNurseRequest) returns (ActiveChargeNurseResponse);
+}
+
+message ChargeVerificationRequest {
+  string ward_id = 1;
+  string nurse_id = 2;
+}
+
+message ChargeVerificationResponse {
+  bool is_active_charge_nurse = 1;
+}
+
+message ActiveChargeNurseRequest {
+  string ward_id = 1;
+}
+
+message ActiveChargeNurseResponse {
+  bool found = 1;
+  string nurse_id = 2; // empty when found is false
+}

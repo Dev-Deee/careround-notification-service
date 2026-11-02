@@ -1,5 +1,6 @@
 package com.dayo.careround.notificationservice.services;
 
+import lombok.extern.slf4j.Slf4j;
 import com.dayo.careround.notificationservice.data.models.Alert;
 import com.dayo.careround.notificationservice.data.models.enums.EscalationState;
 import com.dayo.careround.notificationservice.data.repositories.AlertRepository;
@@ -24,6 +25,7 @@ import java.util.UUID;
  * Replay and acknowledgement for the alerts realtime-service pushes. Replay is how a tablet recovers alerts
  * it missed while disconnected (Redis pub/sub keeps nothing).
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AlertQueryService {
@@ -40,8 +42,20 @@ public class AlertQueryService {
         Instant from = since != null ? since : Instant.now().minus(DEFAULT_WINDOW);
         PageRequest cap = PageRequest.of(0, MAX_RESULTS);
         List<Alert> alerts = unacknowledgedOnly
-                ? alertRepository.findByWardIdAndCreatedAtGreaterThanEqualAndAcknowledgedAtIsNullOrderByCreatedAtDesc(wardId, from, cap)
-                : alertRepository.findByWardIdAndCreatedAtGreaterThanEqualOrderByCreatedAtDesc(wardId, from, cap);
+                ? alertRepository.findByWardIdAndTargetUserIdIsNullAndCreatedAtGreaterThanEqualAndAcknowledgedAtIsNullOrderByCreatedAtDesc(wardId, from, cap)
+                : alertRepository.findByWardIdAndTargetUserIdIsNullAndCreatedAtGreaterThanEqualOrderByCreatedAtDesc(wardId, from, cap);
+        return alerts.stream().map(AlertMapper::toResponse).toList();
+    }
+
+    // The caller's own targeted alerts (how an offline doctor recovers what was pushed to /topic/users/{id}).
+    // Same window and cap as the ward replay.
+    @Transactional(readOnly = true)
+    public List<AlertResponse> getMyAlerts(Instant since, boolean unacknowledgedOnly, CareRoundPrincipal caller) {
+        Instant from = since != null ? since : Instant.now().minus(DEFAULT_WINDOW);
+        PageRequest cap = PageRequest.of(0, MAX_RESULTS);
+        List<Alert> alerts = unacknowledgedOnly
+                ? alertRepository.findByTargetUserIdAndCreatedAtGreaterThanEqualAndAcknowledgedAtIsNullOrderByCreatedAtDesc(caller.userId(), from, cap)
+                : alertRepository.findByTargetUserIdAndCreatedAtGreaterThanEqualOrderByCreatedAtDesc(caller.userId(), from, cap);
         return alerts.stream().map(AlertMapper::toResponse).toList();
     }
 
@@ -59,8 +73,19 @@ public class AlertQueryService {
     public AlertResponse acknowledge(UUID alertPublicId, CareRoundPrincipal caller) {
         Alert alert = alertRepository.findByPublicIdForUpdate(alertPublicId)
                 .orElseThrow(() -> new AlertNotFoundException("No alert with that id"));
-        // An alert without a ward (wardUnresolved) can only be acknowledged by an admin.
-        requireWardAccess(alert.getWardId(), caller);
+        boolean adminForSomeoneElse = false;
+        if (alert.getTargetUserId() != null) {
+            // A targeted alert: only its target, or an admin (recorded as acknowledgedAsAdmin and logged).
+            if (!alert.getTargetUserId().equals(caller.userId())) {
+                if (!"ADMIN".equals(caller.role())) {
+                    throw new AccessDeniedException("This alert is addressed to someone else");
+                }
+                adminForSomeoneElse = true;
+            }
+        } else {
+            // A ward alert. One without a ward (wardUnresolved) can only be acknowledged by an admin.
+            requireWardAccess(alert.getWardId(), caller);
+        }
 
         if (alert.getAcknowledgedAt() != null) {
             return AlertMapper.toResponse(alert);
@@ -70,11 +95,13 @@ public class AlertQueryService {
         // Postgres keeps microseconds: truncate so this response, the pushed message and every repeat agree.
         alert.setAcknowledgedAt(Instant.now().truncatedTo(ChronoUnit.MICROS));
         alert.setEscalationState(EscalationState.ACKNOWLEDGE);
+        if (adminForSomeoneElse) {
+            alert.setAcknowledgedAsAdmin(true);
+            log.info("AUDIT admin {} acknowledged alert {} addressed to {}", caller.userId(), alert.getPublicId(), alert.getTargetUserId());
+        }
         alertRepository.save(alert);
 
-        alertPublisher.publishAfterCommit(new AlertMessage(
-                AlertMessage.SCHEMA_VERSION, AlertMessage.ALERT_ACKNOWLEDGED, alert.getPublicId(), alert.getSourceEventId(),
-                alert.getType().name(), alert.getWardId(), alert.getPatientId(), alert.getAcknowledgedAt(), alert.getAcknowledgedBy()));
+        alertPublisher.publishAfterCommit(AlertMessage.of(AlertMessage.ALERT_ACKNOWLEDGED, alert, alert.getAcknowledgedAt()));
 
         return AlertMapper.toResponse(alert);
     }
